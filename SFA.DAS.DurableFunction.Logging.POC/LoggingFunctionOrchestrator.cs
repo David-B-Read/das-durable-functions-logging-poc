@@ -8,42 +8,43 @@ using AutoFixture;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.DurableTask;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Extensions.Logging;
 using SFA.DAS.DurableFunction.Logging.POC;
 
 namespace SFA.DAS.DurableFunction.POC
 {
-    public static class LoggingFunctionOrchestrator
+    public class LoggingFunctionOrchestrator
     {
+        private readonly ITracingLogger _logger;
+
+        public LoggingFunctionOrchestrator(ITracingLogger logger)
+        {
+            _logger = logger;
+        }
 
         [FunctionName("LoggingFunction")]
-        public static async Task RunOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext context, ILogger log)
+        public async Task RunOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext context)
         {
-            var logger = TracingLoggerFactory.GetTracingLogger(log);
-
-            logger.LogInformation($"Started orchestrator with ID {context.InstanceId}");
+            _logger.LogInformation($"Started orchestrator with ID {context.InstanceId}");
             var retryPolicy = new RetryOptions(new TimeSpan(0,0,0,1), 10);
             retryPolicy.BackoffCoefficient = 2;
 
             var learners = await context.CallActivityAsync<List<Learner>>("GetLearners", null);
             if (learners.Count > 0)
             {
-                logger.LogInformation($"{learners.Count} learners to be processed");
+                _logger.LogInformation($"{learners.Count} learners to be processed");
                 
                 return;
             }
         }
 
         [FunctionName("GetLearners")]
-        public static async Task<List<Learner>> GetLearners([ActivityTrigger] string name, ILogger log)
+        public async Task<List<Learner>> GetLearners([ActivityTrigger] string name)
         {
-            var logger = TracingLoggerFactory.GetTracingLogger(log);
-
             var fixture = new Fixture();
             var learners = fixture.CreateMany<Learner>(3).ToList();
             foreach (var learner in learners)
             {
-                logger.LogInformation("Created learner", learner.Uln.ToString(), learner.LegalEntityId.ToString());
+                _logger.LogInformation("Created learner", learner.Uln.ToString(), learner.LegalEntityId.ToString());
             }
 
             return await Task.FromResult(learners);
@@ -51,24 +52,21 @@ namespace SFA.DAS.DurableFunction.POC
                
 
         [FunctionName("PaymentOrchestrator_HttpStart")]
-        public static async Task<HttpResponseMessage> HttpStart(
+        public async Task<HttpResponseMessage> HttpStart(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "orchestrators/{functionName}/{instanceId}")] HttpRequestMessage req,
             [DurableClient] IDurableOrchestrationClient starter,
             string functionName,
-            string instanceId,
-            ILogger log)
-        {
-            var logger = TracingLoggerFactory.GetTracingLogger(log);
-
+            string instanceId)
+        {            
             var existingInstance = await starter.GetStatusAsync(instanceId);
             if (existingInstance == null)
             {
-                return await Start(starter, logger, req, instanceId, functionName);
+                return await Start(starter, req, instanceId, functionName);
             }
             else if (existingInstance.RuntimeStatus == OrchestrationRuntimeStatus.Completed)
             {
                 existingInstance.RuntimeStatus = OrchestrationRuntimeStatus.Pending;
-                return await Start(starter, logger, req, instanceId, functionName);
+                return await Start(starter, req, instanceId, functionName);
             }
 
             return new HttpResponseMessage(HttpStatusCode.Conflict)
@@ -77,11 +75,11 @@ namespace SFA.DAS.DurableFunction.POC
             };
         }
 
-        private async static Task<HttpResponseMessage> Start(IDurableOrchestrationClient starter, ITracingLogger logger, HttpRequestMessage req, string instanceId, string functionName)
+        private async Task<HttpResponseMessage> Start(IDurableOrchestrationClient starter, HttpRequestMessage req, string instanceId, string functionName)
         {
             await starter.StartNewAsync(functionName, instanceId);
 
-            logger.LogInformation($"Started orchestration with ID = '{instanceId}'.");
+            _logger.LogInformation($"Started orchestration with ID = '{instanceId}'.");
 
             return await Task.FromResult(starter.CreateCheckStatusResponse(req, instanceId));
         }

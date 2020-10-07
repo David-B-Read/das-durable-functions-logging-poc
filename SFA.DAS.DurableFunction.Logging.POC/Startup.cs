@@ -21,10 +21,13 @@ namespace SFA.DAS.DurableFunction.Logging.POC
 
             var configBuilder = new ConfigurationBuilder()
                 .SetBasePath(currentDirectory)
-                .AddJsonFile("local.settings.json")
-                .Build();                
+                .AddJsonFile("local.settings.json");
+            
+            var builtConfig = configBuilder.Build();
 
-            ServiceActivator.Configure(builder.Services.BuildServiceProvider());
+            builder.Services.AddTransient<IConfiguration>(x => builtConfig);
+            builder.Services.AddTransient<ITracingLogger, TracingLogger>();
+
         }
     }
 }

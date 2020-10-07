@@ -8,10 +8,10 @@ namespace SFA.DAS.DurableFunction.Logging.POC
 {
     public class TracingLogger : ITracingLogger
     {
-        private readonly ILogger _logger;
+        private readonly ILogger<TracingLogger> _logger;
         private readonly IConfiguration _configuration;
 
-        public TracingLogger(ILogger logger, IConfiguration configuration)
+        public TracingLogger(ILogger<TracingLogger> logger, IConfiguration configuration)
         {
             _logger = logger;
             _configuration = configuration;
