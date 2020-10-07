@@ -11,18 +11,19 @@ namespace SFA.DAS.DurableFunction.Logging.POC
         private readonly ILogger _logger;
         private readonly IConfiguration _configuration;
 
-        public TracingLogger(ILogger logger)
+        public TracingLogger(ILogger logger, IConfiguration configuration)
         {
             _logger = logger;
-            //_configuration = configuration;
+            _configuration = configuration;
         }
 
+        // Expand optional params to include identifiable data for logs
         public void LogInformation(string message, string uln = null, string legalEntityId = null)
         {
             _logger.LogInformation(message);
 
             var telemetryConfiguration = TelemetryConfiguration.CreateDefault();
-            telemetryConfiguration.InstrumentationKey = "11111111-2222-3333-4444-555555555555"; //_configuration["APPINSIGHTS_INSTRUMENTATIONKEY"];
+            telemetryConfiguration.InstrumentationKey = _configuration["APPINSIGHTS_INSTRUMENTATIONKEY"];
             var telemetryClient = new TelemetryClient(telemetryConfiguration);
             var customProperties = new Dictionary<string, string>
             {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -9,7 +8,6 @@ using AutoFixture;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.DurableTask;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SFA.DAS.DurableFunction.Logging.POC;
 
@@ -21,7 +19,7 @@ namespace SFA.DAS.DurableFunction.POC
         [FunctionName("LoggingFunction")]
         public static async Task RunOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext context, ILogger log)
         {
-            var logger = new TracingLogger(log);
+            var logger = TracingLoggerFactory.GetTracingLogger(log);
 
             logger.LogInformation($"Started orchestrator with ID {context.InstanceId}");
             var retryPolicy = new RetryOptions(new TimeSpan(0,0,0,1), 10);
@@ -39,7 +37,8 @@ namespace SFA.DAS.DurableFunction.POC
         [FunctionName("GetLearners")]
         public static async Task<List<Learner>> GetLearners([ActivityTrigger] string name, ILogger log)
         {
-            var logger = new TracingLogger(log);
+            var logger = TracingLoggerFactory.GetTracingLogger(log);
+
             var fixture = new Fixture();
             var learners = fixture.CreateMany<Learner>(3).ToList();
             foreach (var learner in learners)
@@ -59,16 +58,17 @@ namespace SFA.DAS.DurableFunction.POC
             string instanceId,
             ILogger log)
         {
+            var logger = TracingLoggerFactory.GetTracingLogger(log);
 
             var existingInstance = await starter.GetStatusAsync(instanceId);
             if (existingInstance == null)
             {
-                return await Start(starter, log, req, instanceId, functionName);
+                return await Start(starter, logger, req, instanceId, functionName);
             }
             else if (existingInstance.RuntimeStatus == OrchestrationRuntimeStatus.Completed)
             {
                 existingInstance.RuntimeStatus = OrchestrationRuntimeStatus.Pending;
-                return await Start(starter, log, req, instanceId, functionName);
+                return await Start(starter, logger, req, instanceId, functionName);
             }
 
             return new HttpResponseMessage(HttpStatusCode.Conflict)
@@ -77,11 +77,11 @@ namespace SFA.DAS.DurableFunction.POC
             };
         }
 
-        private async static Task<HttpResponseMessage> Start(IDurableOrchestrationClient starter, ILogger log, HttpRequestMessage req, string instanceId, string functionName)
+        private async static Task<HttpResponseMessage> Start(IDurableOrchestrationClient starter, ITracingLogger logger, HttpRequestMessage req, string instanceId, string functionName)
         {
             await starter.StartNewAsync(functionName, instanceId);
 
-            log.LogInformation($"Started orchestration with ID = '{instanceId}'.");
+            logger.LogInformation($"Started orchestration with ID = '{instanceId}'.");
 
             return await Task.FromResult(starter.CreateCheckStatusResponse(req, instanceId));
         }
