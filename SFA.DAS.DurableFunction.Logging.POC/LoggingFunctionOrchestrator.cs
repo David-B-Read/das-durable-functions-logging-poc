@@ -49,7 +49,23 @@ namespace SFA.DAS.DurableFunction.POC
 
             return await Task.FromResult(learners);
         }
-               
+
+        [FunctionName("ErrorFunction")]
+        public async Task RunErrorOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext context)
+        {
+            _logger.LogInformation($"Started orchestrator with ID {context.InstanceId}");
+            var retryPolicy = new RetryOptions(new TimeSpan(0, 0, 0, 1), 10);
+            retryPolicy.BackoffCoefficient = 2;
+
+            var learners = await context.CallActivityAsync<List<Learner>>("GetLearnersError", null);
+        }
+
+        [FunctionName("GetLearnersError")]
+        public async Task<List<Learner>> GetLearnersError([ActivityTrigger] string name)
+        {
+            throw new Exception($"Error generated {Guid.NewGuid()}");
+        }
+
 
         [FunctionName("PaymentOrchestrator_HttpStart")]
         public async Task<HttpResponseMessage> HttpStart(
