@@ -63,7 +63,16 @@ namespace SFA.DAS.DurableFunction.POC
         [FunctionName("GetLearnersError")]
         public async Task<List<Learner>> GetLearnersError([ActivityTrigger] string name)
         {
-            throw new Exception($"Error generated {Guid.NewGuid()}");
+            try
+            {
+                throw new Exception($"Error generated {Guid.NewGuid()}");
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError("Unable to retrieve learners", exception);
+                // act appropriately to the severity of the exception - retry or throw to orchestrator
+                throw;
+            }
         }
 
 
