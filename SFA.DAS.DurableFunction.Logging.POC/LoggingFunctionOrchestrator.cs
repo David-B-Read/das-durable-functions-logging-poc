@@ -54,25 +54,43 @@ namespace SFA.DAS.DurableFunction.POC
         public async Task RunErrorOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext context)
         {
             _logger.LogInformation($"Started orchestrator with ID {context.InstanceId}");
-            var retryPolicy = new RetryOptions(new TimeSpan(0, 0, 0, 1), 10);
-            retryPolicy.BackoffCoefficient = 2;
+            var retryPolicy = new RetryOptions(new TimeSpan(0, 0, 0, 3), 10)
+            {
+                BackoffCoefficient = 2
+            };
 
-            var learners = await context.CallActivityAsync<List<Learner>>("GetLearnersError", null);
+            try
+            {
+                var learners = await context.CallActivityWithRetryAsync<List<Learner>>("GetLearnersError", retryPolicy, null);
+            }
+            catch (FunctionFailedException functionFailedException)
+            {
+                //
+                // Would expect function failed exception to bubble up to orchestrator,
+                // but this doesn't happen when using retry async
+                //
+                var canProceed = retryPolicy.Handle(functionFailedException);
+                if (canProceed)                
+                { 
+                    _logger.LogInformation("Unable to retrieve learners");
+                   // context.
+                }
+                else
+                {
+                    _logger.LogError("Final attempt to retrieve learners failed", functionFailedException);
+                }
+            }
+            catch (Exception unexpectedException)
+            {
+                _logger.LogError("Unable to retrieve learners", unexpectedException);
+                throw;
+            }
         }
 
         [FunctionName("GetLearnersError")]
         public async Task<List<Learner>> GetLearnersError([ActivityTrigger] string name)
         {
-            try
-            {
-                throw new Exception($"Error generated {Guid.NewGuid()}");
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError("Unable to retrieve learners", exception);
-                // act appropriately to the severity of the exception - retry or throw to orchestrator
-                throw;
-            }
+            throw new Exception($"Error generated {Guid.NewGuid()}");           
         }
 
 
