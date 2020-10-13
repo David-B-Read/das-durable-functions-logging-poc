@@ -54,14 +54,16 @@ namespace SFA.DAS.DurableFunction.POC
         public async Task RunErrorOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext context)
         {
             _logger.LogInformation($"Started orchestrator with ID {context.InstanceId}");
-            var retryPolicy = new RetryOptions(new TimeSpan(0, 0, 0, 3), 10)
+            var retryPolicy = new RetryOptions(new TimeSpan(0, 0, 0, 3), 3)
             {
-                BackoffCoefficient = 2
+                BackoffCoefficient = 2,
+                // allow retries for certain types of exception
+                Handle = ex => ex.GetType() == typeof(TimeoutException) 
             };
 
             try
             {
-                var learners = await context.CallActivityWithRetryAsync<List<Learner>>("GetLearnersError", retryPolicy, null);
+                var learners = await context.CallActivityWithRetryAsync<List<Learner>>("GetLearnersError", retryPolicy, null);                
             }
             catch (FunctionFailedException functionFailedException)
             {
@@ -69,16 +71,8 @@ namespace SFA.DAS.DurableFunction.POC
                 // Would expect function failed exception to bubble up to orchestrator,
                 // but this doesn't happen when using retry async
                 //
-                var canProceed = retryPolicy.Handle(functionFailedException);
-                if (canProceed)                
-                { 
-                    _logger.LogInformation("Unable to retrieve learners");
-                   // context.
-                }
-                else
-                {
-                    _logger.LogError("Final attempt to retrieve learners failed", functionFailedException);
-                }
+                _logger.LogError("Attempt to retrieve learners failed", functionFailedException);
+                
             }
             catch (Exception unexpectedException)
             {
